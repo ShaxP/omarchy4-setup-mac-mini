@@ -335,8 +335,14 @@ Healthy output has a `SATA link up` line for the disk **and** one for the DVD, p
    force the save, a broken `/etc/sudoers` removes `sudo` entirely. Verify:
 
    ```bash
-   grep -E '^\s*%wheel' /etc/sudoers      # one line, no leading #
+   sudo -l -U "$VMUSER"                  # want a line granting (ALL : ALL) ALL
    ```
+
+   Check it functionally, not textually. `/etc/sudoers` is mode `0440 root:root`, so
+   `grep` on it as a non-root user prints `Permission denied` to stderr and nothing to
+   stdout — which looks exactly like "the edit did not work" and sends you off fixing
+   something that was never broken. If you do grep it, be root and use `grep -n wheel`
+   without an anchor so you can see commented and uncommented lines alike.
 
    If nano refuses to start at all, that is the `TERM` problem — `export TERM=linux`
    at the top of this step.
