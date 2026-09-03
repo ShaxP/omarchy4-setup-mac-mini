@@ -43,41 +43,46 @@ both are x86_64 only and will not boot.
 Parallels: new VM from the ISO, type **Other Linux**. 4 CPUs / 16 GB RAM / 64 GB disk
 worked for the original author; on an M4 Pro you can be more generous.
 
-### Disk controller: choose SATA, not IDE
+### Disk: attach one, on SATA
 
-**Set the hard disk to SATA before first boot.** If Parallels offers IDE at all on
-Apple Silicon, do not pick it.
+**Confirmed failure on the Mac Mini run: the VM was created with no hard disk at all.**
+This is the first thing to check, ahead of any driver theory. In Parallels: Configure >
+Hardware, and make sure a **Hard Disk** device actually exists (64 GB, **SATA**,
+expanding). Creating a VM from an ISO does not always add one.
 
-Reasoning: IDE/PATA emulation is a legacy x86 PC-chipset device. Its Linux drivers
-(`ata_piix` and friends) are x86 config options and are generally **not built into
-aarch64 kernels**, including Arch Linux ARM's. AHCI/SATA is architecture-neutral and is
-compiled in. So on an ARM guest an IDE disk can be present in the VM and still have no
-driver — the disk simply does not appear, which is exactly the "installer cannot see my
-hard drive" failure. SATA also gives you `/dev/sda`, which is what every command in this
-checklist assumes.
+If Parallels offers IDE, still prefer SATA: IDE/PATA emulation is a legacy x86
+chipset device whose Linux drivers (`ata_piix` and friends) are x86 kernel config
+options and are generally not built into aarch64 kernels. SATA also gives you
+`/dev/sda`, which is what every command in this checklist assumes.
 
-### If the disk still does not show up
+### Before partitioning, confirm the disk is really there
 
-Run these in the archboot shell **before** partitioning:
+Run this in the archboot shell:
 
 ```bash
-lsblk                      # expect sda, ~64G
-ls /dev/sd* /dev/vd* /dev/nvme* 2>/dev/null
-dmesg | grep -iE 'ahci|ata[0-9]|sd [0-9]|nvme'   # look for the controller binding
+lsblk
+dmesg | grep -iE 'ahci|ata[0-9]|nvme|Direct-Access'
 ```
 
-Interpretation:
+Healthy output has a `SATA link up` line for the disk **and** one for the DVD, plus
+`sda` in `lsblk`. Interpretation:
 
-- `sda` present → good, proceed.
-- **Nothing at all** → almost certainly the IDE/PATA situation above. Shut the VM down,
-  switch the disk to SATA in Parallels, reboot the ISO. Do not try to fix this from
-  inside the guest.
-- `nvme0n1` instead → the disk is on NVMe. Everything works, but **substitute
-  `/dev/nvme0n1` for `/dev/sda`, and `p1`/`p2`/`p3` for the partition suffixes**
-  (`/dev/nvme0n1p1`, not `/dev/nvme0n11`) in every command below.
-- `vda` → virtio. Same deal, substitute `/dev/vda` / `vda1`.
-- `sda` present but `cfdisk` refuses to write → the ISO is still holding it, or the
-  disk is under 1M. Re-check `lsblk` size.
+- `sda` present at ~64G → good, proceed.
+- **`lsblk` shows only `sr0` and `zram0`**, and `dmesg` shows the AHCI controller found
+  (`ahci PRL4010:00`, `scsi host0..5`) with exactly one `ata2: SATA link up` for the
+  `Virtual DVD-ROM` and `SATA link down` on every other port → **no disk is attached.**
+  This is not a driver problem: SATA clearly works, it enumerated the DVD over the same
+  controller. Power off and add a Hard Disk in Parallels. `zram0` mounted at `/` is
+  archboot's normal RAM root, not your disk.
+- `nvme0n1` instead → works fine, but **substitute `/dev/nvme0n1` for `/dev/sda`, and
+  `p1`/`p2`/`p3` for the partition suffixes** (`/dev/nvme0n1p1`, not `/dev/nvme0n11`).
+- `vda` → virtio. Substitute `/dev/vda` / `vda1`.
+- Controller not found at all (no `ahci` lines) → then it is the IDE case above; switch
+  the disk to SATA in Parallels.
+
+> Adding the disk requires a power-off, and rebooting gives you a fresh live
+> environment — the network and sshd setup below is lost and must be redone. Check for
+> the disk **before** investing in the SSH setup.
 
 1. Boot the ISO. A text-mode setup wizard starts — **press Ctrl+C to exit it.** Its
    automated install does not work in this VM. Everything below is by hand.
