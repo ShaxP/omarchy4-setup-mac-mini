@@ -325,8 +325,31 @@ Healthy output has a `SATA link up` line for the disk **and** one for the DVD, p
    that installs cleanly and then refuses to boot. The copy costs nothing if the NVRAM
    entry works. (`grub-install --removable` does the same thing in one step.)
 
-7. Exit chroot, reboot, **disconnect the ISO in Parallels** and set Hard Disk first in
-   the boot order. GRUB prints
+7. Exit the chroot and **power off** rather than reboot — you do not want to race the
+   boot menu, and the ISO is easier to detach with the VM stopped.
+
+   In the guest:
+
+   ```bash
+   exit                 # leave the chroot
+   umount -R /mnt
+   poweroff
+   ```
+
+   On the Mac, VM stopped:
+
+   ```bash
+   prlctl set "Omarchy 4" --device-set cdrom0 --disable
+   prlctl list -i "Omarchy 4" | grep -E 'hdd0|cdrom0'   # want cdrom0 (-) and hdd0 (+)
+   prlctl start "Omarchy 4"
+   ```
+
+   Same `(+)`/`(-)` flag as the disk. GUI equivalent: Configure > Hardware > CD/DVD 1,
+   uncheck **Connected**; or with the VM running, Devices > CD/DVD > Disconnect. Set
+   Hard Disk first in the boot order while you are in there.
+
+   To re-attach the ISO later for a rescue boot:
+   `prlctl set "Omarchy 4" --device-set cdrom0 --enable`. GRUB prints
    `efi_uga.mod not found` — harmless, press any key.
 
 > Snapshot: `phase-1-base`
