@@ -553,9 +553,21 @@ run the loop once instead of four times:
 
 ```bash
 for s in config/snapper.sh config/firewall.sh user/mise-work.sh; do
-  sudo sh -c "printf '#!/bin/bash\nexit 0\n' > /usr/share/omarchy/install/$s"
+  printf '#!/bin/bash\nexit 0\n' | sudo tee "/usr/share/omarchy/install/$s" >/dev/null
 done
+
+# verify - each must be the two-line stub
+head -2 /usr/share/omarchy/install/config/snapper.sh \
+        /usr/share/omarchy/install/config/firewall.sh \
+        /usr/share/omarchy/install/user/mise-work.sh
 ```
+
+**Use this `tee` form**, not `sudo sh -c "printf '#!/bin/bash...'"`. In the `sh -c`
+version the `#!` sits inside **double** quotes — the nested single quotes are literal
+characters there and protect nothing — so interactive bash attempts history expansion on
+`!/bin/bash` and dies with `event not found`, taking the rest of the loop with it. Single
+quotes at the top level, as above, are safe. (`set +H` also works, but only for that
+shell.) Same applies to blanking any individual script later in this phase.
 
 Why each one fails:
 
