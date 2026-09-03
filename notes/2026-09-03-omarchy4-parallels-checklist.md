@@ -82,6 +82,33 @@ Interpretation:
 1. Boot the ISO. A text-mode setup wizard starts — **press Ctrl+C to exit it.** Its
    automated install does not work in this VM. Everything below is by hand.
 
+   **[+] Get SSH up in the live environment right now, before partitioning.** There is
+   no clipboard into the Parallels console, and every command from here on is long.
+   Archboot is designed for remote installs, so `openssh` is already on the ISO:
+
+   ```bash
+   ip -4 addr show scope global      # Parallels NAT usually gives 10.211.55.x
+   passwd                            # sshd refuses empty-password logins
+   ssh-keygen -A
+   sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+   systemctl start sshd
+   systemctl is-active sshd          # -> active
+   ss -tlnp | grep ':22'             # -> LISTEN
+   ```
+
+   Then from the Mac: `ssh root@<address>`.
+
+   - No address? The Parallels NIC is usually `enp0s5`. Try
+     `systemctl start systemd-networkd systemd-resolved`, or `dhcpcd enp0s5`.
+   - No `sshd`? `pacman -Sy --noconfirm openssh` — run the step 4 `SigLevel` fix first
+     if it errors on signatures.
+   - Curses programs (`cfdisk`) unhappy over SSH? `export TERM=xterm-256color`.
+
+   This session ends at the step 7 reboot — it is the live ISO's sshd, not the installed
+   system's. The installed system comes back with sshd enabled (step 6) on the same
+   address, and SSH will warn about a changed host key because it genuinely is a
+   different machine: `ssh-keygen -R <address>` on the Mac.
+
 2. Partition: `cfdisk /dev/sda`, label type **gpt**.
 
    | Partition | Size | Type |
