@@ -278,10 +278,46 @@ Healthy output has a `SATA link up` line for the disk **and** one for the DVD, p
    cp /boot/EFI/GRUB/grubaa64.efi /boot/EFI/BOOT/BOOTAA64.EFI
    grub-mkconfig -o /boot/grub/grub.cfg
    useradd -m -G wheel "$VMUSER" && passwd "$VMUSER"
-   EDITOR=nano visudo        # uncomment: %wheel ALL=(ALL:ALL) ALL
+   EDITOR=nano visudo        # opens an editor - see "visudo" below, do not just paste on
    systemctl enable NetworkManager
    systemctl enable sshd     # [+] up on first boot, no console typing needed
    ```
+
+   **`visudo` opens nano and waits for you.** This is the one command in the block that
+   is not fire-and-forget — the rest of step 6 does not run until you finish here. You
+   are uncommenting the `wheel` line so your user can `sudo`; skip it and you have no
+   `sudo` in the installed system, which every later phase depends on.
+
+   1. `Ctrl+W`, type `wheel`, `Enter`. Cycle with `Ctrl+W`+`Enter` until you are on:
+
+      ```
+      # %wheel ALL=(ALL:ALL) ALL
+      ```
+
+      **Not** the `NOPASSWD` variant just below it — leave that one commented:
+
+      ```
+      # %wheel ALL=(ALL:ALL) NOPASSWD: ALL
+      ```
+
+   2. `Home`, then `Delete` twice to remove the `#` and the space. The line must end up
+      with no leading whitespace:
+
+      ```
+      %wheel ALL=(ALL:ALL) ALL
+      ```
+
+   3. `Ctrl+O`, `Enter` to write, `Ctrl+X` to exit.
+
+   `visudo` syntax-checks on exit. If it complains, take the re-edit option — never
+   force the save, a broken `/etc/sudoers` removes `sudo` entirely. Verify:
+
+   ```bash
+   grep -E '^\s*%wheel' /etc/sudoers      # one line, no leading #
+   ```
+
+   If nano refuses to start at all, that is the `TERM` problem — `export TERM=linux`
+   at the top of this step.
 
    **[+] Why the extra copy:** `--bootloader-id=GRUB` writes `/EFI/GRUB/grubaa64.efi`
    and an NVRAM boot entry. Some UEFI firmware ignores the NVRAM entry and only looks
