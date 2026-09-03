@@ -433,7 +433,23 @@ official install script and Omarchy's own setup scripts overwrite your pacman co
 with `stable-mirror.omarchy.org` plus `[multilib]` and `[omarchy]` repos. Neither
 exists for aarch64, so afterwards every pacman command 404s.
 
-**[+] Instead of fixing it reactively, run the helper whenever pacman 404s:**
+**Symptoms.** A broken config does not always look like a 404. Any of these means run
+the helper:
+
+```
+warning: database file for 'multilib' does not exist (use '-Sy' to download)
+warning: database file for 'omarchy' does not exist (use '-Sy' to download)
+error: failed to prepare transaction (could not find database)
+```
+
+That last one is the dangerous one — during `makepkg` it surfaces as
+`ERROR: 'pacman' failed to install missing dependencies` followed by a list of missing
+packages, which reads like the packages are genuinely unavailable on ARM. They are not.
+`scdoc`, `bats`, `python-build`, `go`, `fuse2`, `webkit2gtk-4.1` and friends are all in
+the ARM repos; pacman simply cannot read any database while `[multilib]` and `[omarchy]`
+are in the config.
+
+**[+] Instead of fixing it reactively, run the helper whenever pacman misbehaves:**
 
 ```bash
 sudo ~/fix-pacman-arm.sh
@@ -680,14 +696,35 @@ Three caveats for a 5120x1440 ultrawide:
 Without these the desktop starts but keybindings fire "command not found" notifications.
 **`xdg-terminal-exec` is the critical one — the terminal will not open without it.**
 
+**Run `sudo ~/fix-pacman-arm.sh` first.** Phase 6/7 reliably re-breaks pacman, and every
+package here installs build dependencies. Skipping this makes five of the seven below
+fail with misleading "missing dependencies" errors.
+
 ```bash
+sudo ~/fix-pacman-arm.sh
+sudo pacman -Sy      # must show no multilib/omarchy warnings
+
 git clone https://github.com/maralcbr/omarchy-pkgs.git ~/omarchy-pkgs
-cd ~/omarchy-pkgs && git checkout "$(cut -d= -f2 ~/omarchy-source-commit.txt)"
+cd ~/omarchy-pkgs && git checkout "$(cut -d= -f2 ~/omarchy-source-commit.txt)" \
+  || echo "PINNED CHECKOUT FAILED - building from HEAD, see below"
 cd pkgbuilds
 for p in xdg-terminal-exec python-terminaltexteffects ttf-ia-writer ufw-docker localsend-bin aether cliamp; do
   (cd "$p" && makepkg -si --noconfirm) || echo "FAILED: $p"
 done
 ```
+
+**[+] Check the pinned checkout actually succeeded.** On this run it did not:
+
+```
+fatal: unable to read tree (5939caf720c1fb7e137d57ab87c0182f2132e5a3)
+```
+
+`git checkout` printing a fatal error inside a pasted block scrolls past easily, and the
+build then silently proceeds from `HEAD` instead of the commit the release pinned. Not
+fatal in itself — packages still build — but the PKGBUILDs may not match your bundle.
+Diagnose with `git cat-file -t <commit>` (is the object even present?) and
+`git fetch --all --tags`. If the commit was force-pushed away upstream, `HEAD` is the
+only option; record it as a known deviation.
 
 **[+]** `xdg-terminal-exec` moved to the front of the list — build it first, verify the
 terminal opens, and the rest is comfortable rather than blind.
