@@ -661,35 +661,63 @@ ls -d ~/.config/omarchy          # must exist now
 sudo systemctl restart sddm
 ```
 
-**Resolution / fullscreen.** The VM boots at 1024x768 and there is no dynamic resizing
-without Parallels Tools, so the guest resolution is fixed at boot by a kernel parameter:
+**Resolution / fullscreen.** Omarchy 4 does **not** configure monitors through
+`hyprland.conf`. It uses a Lua config layer in `~/.config/hypr/`, and monitors live in
+`~/.config/hypr/monitors.lua`. Editing `.conf` files, or trying
+`hyprctl keyword monitor ...`, does not work — the latter fails with *"keyword can't
+work with non-legacy parsers, use eval"*.
 
-```bash
-sudo sed -i "s/^GRUB_CMDLINE_LINUX_DEFAULT=\"/&video=Virtual-1:$VMRES /" /etc/default/grub
-grep GRUB_CMDLINE_LINUX_DEFAULT /etc/default/grub    # eyeball it before regenerating
-sudo grub-mkconfig -o /boot/grub/grub.cfg
-sudo reboot
+The stock file contains a catch-all plus commented examples:
+
+```lua
+hl.monitor({ output = "", mode = "preferred", position = "auto", scale = 1 })
 ```
 
-After reboot, check what you actually got — the virtual GPU may not honour the request:
+`output = ""` means every monitor, `mode = "preferred"` means whatever the GPU
+advertises. A specific-output rule appended after it takes precedence for that output,
+so keep the wildcard and add to it.
+
+First get the connector name and the modes actually on offer — the first line of the
+output reads `Monitor <name> (ID 0)`:
 
 ```bash
-hyprctl monitors        # or: cat /sys/class/drm/*/modes | head
+hyprctl monitors all | head -30
 ```
 
-Three caveats for a 5120x1440 ultrawide:
+Then, substituting that name:
 
-- **The `@120` is probably ignored.** Parallels' virtual display is not a real panel;
-  it typically presents 60Hz regardless of what you ask for. Harmless — the mode still
-  applies at 60. If `hyprctl monitors` reports 60, that is expected, not a failure.
-- **Fullscreen is a host-side setting.** Parallels' View > Full Screen scales whatever
-  the guest is rendering. If the guest mode does not match the display's aspect ratio
-  you get letterboxing, so the guest `video=` value should match the panel exactly.
-- **If the mode is rejected**, the guest falls back to 1024x768 and you see it
-  immediately. Step down and retry: `3840x1080@60`, then `2560x1080@60`. Ultrawide modes
-  on a virtual framebuffer are the least-tested path here.
+```bash
+cp ~/.config/hypr/monitors.lua ~/.config/hypr/monitors.lua.bak
+cat >> ~/.config/hypr/monitors.lua <<'EOF'
 
----
+hl.monitor({ output = "Virtual-1", mode = "5120x1440@60", position = "0x0", scale = 1 })
+EOF
+hyprctl reload
+hyprctl monitors
+```
+
+`hyprctl reload` applies it live — no reboot, and the undo is
+`cp ~/.config/hypr/monitors.lua.bak ~/.config/hypr/monitors.lua && hyprctl reload`.
+
+**Confirmed working on this run** at 5120x1440 on an ultrawide.
+
+Caveats:
+
+- **`@120` is likely ignored.** Parallels' virtual display is not a real panel and
+  generally presents 60Hz. If `hyprctl monitors` reports 60, that is expected.
+- **Fullscreen is host-side.** Parallels' View > Full Screen scales whatever the guest
+  renders, so the guest mode should match the panel's aspect ratio or you get
+  letterboxing.
+- **If the mode is not in the list** `hyprctl monitors all` reports, Hyprland will
+  refuse it. Then fall back to forcing it at boot, which can set a mode DRM does not
+  advertise:
+
+  ```bash
+  sudo sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT="/&video=Virtual-1:5120x1440@60 /' /etc/default/grub
+  grep GRUB_CMDLINE_LINUX_DEFAULT /etc/default/grub
+  sudo grub-mkconfig -o /boot/grub/grub.cfg
+  sudo reboot
+  ```
 
 ## Phase 8 — Build the 10 missing packages
 
@@ -809,7 +837,8 @@ hyprctl dispatch exec xdg-terminal-exec          # run it inside the Hyprland se
 
 **Completed 2026-09-03 on the Mac Mini M4 Pro.** Omarchy 4.0.1-mac.1 on Arch Linux ARM,
 128 GB SATA disk, 8 CPUs / 32 GB RAM, Parallels shared networking. Desktop comes up with
-waybar and workspaces, terminal opens, all ten source-built packages installed.
+waybar and workspaces, terminal opens, all ten source-built packages installed, display
+running at 5120x1440.
 
 The install itself was straightforward; effectively all the lost time went to four
 things, all now documented above:
