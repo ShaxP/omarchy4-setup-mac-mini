@@ -1,0 +1,62 @@
+# Omarchy 4 on Apple Silicon, in Parallels
+
+A worked, phase-by-phase checklist for installing **Omarchy 4 (Quattro)** in a
+**Parallels Desktop** VM on an Apple Silicon Mac — written while actually doing it on a
+**Mac Mini M4 Pro**, with every failure encountered recorded alongside the fix.
+
+**→ [The checklist](notes/2026-09-03-omarchy4-parallels-checklist.md)**
+
+## Why this exists
+
+Official Omarchy is **x86_64 only**. The ISO will not boot on Apple Silicon, where
+Parallels can run arm64 guests only. There is no supported path, so this one goes:
+
+1. **Arch Linux ARM** as the base, from an arm64 **archboot** ISO
+2. Omarchy's **aarch64 package bundle** installed on top
+
+Result on this run: **Omarchy 4.0.1-mac.1**, 128 GB SATA disk, 8 CPUs / 32 GB RAM.
+Desktop, terminal and keybindings all working.
+
+## What's here
+
+| | |
+|---|---|
+| [`notes/`](notes/) | The checklist — 9 phases, every command, every failure and its cause |
+| [`scripts/fix-pacman-arm.sh`](scripts/fix-pacman-arm.sh) | Restores the Arch Linux ARM pacman config that Omarchy's scripts overwrite with x86 mirrors. Needed after **every** `omarchy update`, indefinitely |
+
+## The four things that actually cost time
+
+None of these appear in the source guide. All are documented with their exact symptoms:
+
+1. **The VM's disk was `disabled`, not missing.** `prlctl list -i` shows `hdd0 (-)`. From
+   inside the guest this is indistinguishable from a missing disk — the AHCI controller
+   enumerates fine and the port is simply empty — so it cannot be diagnosed from there.
+2. **archboot's NIC starts `DOWN`, and its sshd refuses password auth.** Neither is
+   mentioned anywhere; together they make the "SSH in and paste the rest" approach
+   impossible until both are fixed.
+3. **`$VMUSER` does not survive into the chroot.** `useradd -m -G wheel ""` fails
+   silently mid-paste and the install completes with *no user account*, surfacing two
+   steps later as an SSH `Permission denied` that looks exactly like a wrong password.
+4. **Omarchy re-breaks pacman before the source builds.** Five of seven packages then
+   fail with `Could not resolve all dependencies`, naming packages that are in fact
+   available — pacman just cannot read any database while `[multilib]` and `[omarchy]`
+   are in the config.
+
+## Known limitations
+
+- `omarchy update` restores the x86 pacman templates every time. Re-run the fix script.
+- **No Parallels Tools on ARM Arch:** no clipboard sync with macOS, no dynamic
+  resolution (set it via a kernel parameter), single display only.
+- x86-only apps from Omarchy's catalog (Spotify, 1Password, …) cannot be installed.
+- The VM as described runs with `SigLevel = Never` and no disk encryption. It is a
+  disposable experiment, not a place for real credentials.
+
+## Credit
+
+- [u/antipop2's r/omarchy guide](https://www.reddit.com/r/omarchy/comments/1vrpp7b/40_running_in_parallels/) — the source this is based on, done on an M2 Max
+- [maralcbr/omarchy-mx-mac](https://github.com/maralcbr/omarchy-mx-mac) and
+  [maralcbr/omarchy-pkgs](https://github.com/maralcbr/omarchy-pkgs) — the aarch64
+  packages and signed release channel that make any of this possible
+
+Unsupported by everyone involved: Omarchy says no M-series Macs, omarchy-mx-mac targets
+bare-metal Asahi rather than VMs. If it breaks, you own it.
