@@ -392,7 +392,9 @@ Healthy output has a `SATA link up` line for the disk **and** one for the DVD, p
 
    To re-attach the ISO later for a rescue boot:
    `prlctl set "Omarchy 4" --device-set cdrom0 --enable`. GRUB prints
-   `efi_uga.mod not found` — harmless, press any key.
+   `efi_uga.mod not found` — harmless, press any key. It recurs on **every** boot and
+   blocks each one on a keypress; see "Removing the efi_uga boot pause" in Phase 9 to
+   get rid of it once the system is installed.
 
 > Snapshot: `phase-1-base`
 
@@ -822,6 +824,48 @@ pacman -Ql xdg-terminal-exec | grep -E '/bin/'   # is it on disk?
 systemctl --user show-environment | grep -i '^PATH'
 hyprctl dispatch exec xdg-terminal-exec          # run it inside the Hyprland session
 ```
+
+## Removing the `efi_uga` boot pause
+
+Every boot stops with:
+
+```
+error: fs/fshelp.c:find_file:260:file `/grub/arm64-efi/efi_uga.mod' not found.
+Press any key to continue...
+```
+
+`efi_uga` is GRUB's legacy UEFI Universal Graphics Adapter driver — an x86 thing that
+**is not shipped for arm64** (`/boot/grub/arm64-efi/` has `efi_gop.mod` and no
+`efi_uga.mod`). `/etc/grub.d/00_header` emits `insmod efi_uga` unconditionally for EFI
+platforms, so GRUB tries to load a module that cannot exist. Harmless, but it blocks
+every boot on a keypress.
+
+`efi_gop` is the modern UEFI graphics protocol and is present, so dropping `efi_uga`
+loses nothing:
+
+```bash
+sudo cp /etc/grub.d/00_header /root/00_header.bak      # NOT in /etc/grub.d - see below
+sudo sed -i '/^[[:space:]]*insmod efi_uga[[:space:]]*$/d' /etc/grub.d/00_header
+grep -n 'efi_uga\|efi_gop' /etc/grub.d/00_header      # efi_uga gone, efi_gop remains
+sudo grub-mkconfig -o /boot/grub/grub.cfg
+grep -c efi_uga /boot/grub/grub.cfg                    # must be 0
+sudo reboot
+```
+
+**Never leave a backup inside `/etc/grub.d/`.** `grub-mkconfig` executes *every
+executable file* in that directory, and `cp` preserves the execute bit — so a
+`00_header.bak` there is run as a generator and re-emits the exact block you just
+removed. The symptom is `grep -c efi_uga /boot/grub/grub.cfg` stubbornly returning 2
+after a patch that clearly worked, with `grep -rn efi_uga /etc/grub.d/` matching only
+the `.bak`. Keep backups elsewhere, or `chmod -x` them. (`/etc/default/grub.bak` is
+fine — `/etc/default` is sourced by name, not executed.)
+
+A `grub` package update restores `00_header` and the pause comes back. Same category as
+the pacman templates: re-run the `sed` and `grub-mkconfig`.
+
+`GRUB_TERMINAL_OUTPUT=console` does **not** fix this — the `load_video` block runs
+regardless of terminal choice. It is a red herring; revert it if you tried it and want
+the graphical menu back.
 
 ## Permanent limitations — accept these before starting
 
