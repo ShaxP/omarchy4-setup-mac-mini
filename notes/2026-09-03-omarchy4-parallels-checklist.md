@@ -507,12 +507,20 @@ grep -vE '^\s*(#|$)' all.packages | tr -s ' \n' '\n' \
 Check what the ALARM repos actually have **before** installing anything:
 
 ```bash
-for p in $(cat repo.packages); do pacman -Si "$p" &>/dev/null || echo "MISSING: $p"; done
+sudo pacman -Sy >/dev/null 2>&1 && echo "pacman OK" || echo "pacman BROKEN - run fix-pacman-arm.sh"
+for p in $(cat repo.packages); do pacman -Si "$p" &>/dev/null || echo "MISSING: $p"; done | tee missing.txt
 ```
 
-The original author got exactly 10 missing — the ones the official installer builds
-from source. Expect the same list, but **trust your own output over this one**, it can
-drift:
+Check pacman first: if Omarchy has already broken it, **every** package reports as
+missing and the list is worthless. Everything-missing is the signature of a broken
+pacman config, not of genuinely absent packages. The `tee` keeps the list for Phase 8.
+The loop is read-only and idempotent — safe to re-run at any point, and the answer does
+not change once the bundle is installed, since it queries the repos rather than what is
+installed.
+
+**Confirmed identical on this run (4.0.1-mac.1): the same 10 packages**, the ones the
+official installer builds from source. Still trust your own output over this list — but
+two independent runs on different releases agreeing is a good sign it is stable:
 
 `aether` `cliamp` `localsend` `mise` `python-terminaltexteffects` `ttf-ia-writer`
 `ufw-docker` `xdg-terminal-exec` `yaru-icon-theme` `yay`
@@ -704,7 +712,7 @@ Two packages need special handling:
 
 ## Open questions / to verify on this machine
 
-- [ ] Confirm the missing-package list matches the 10 above (Phase 5 check loop).
+- [x] Missing-package list confirmed identical to the guide's 10 on 4.0.1-mac.1.
 - [x] Version drift: guide was 4.0.0-mac.6, this run got **4.0.1-mac.1** — same
       version the user installed on the M1 Pro MacBook. Nothing in the guide has
       needed adjusting for it so far.
