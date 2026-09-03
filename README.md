@@ -22,7 +22,23 @@ Desktop, terminal and keybindings all working.
 | | |
 |---|---|
 | [`notes/`](notes/) | The checklist — 9 phases, every command, every failure and its cause |
-| [`scripts/fix-pacman-arm.sh`](scripts/fix-pacman-arm.sh) | Restores the Arch Linux ARM pacman config that Omarchy's scripts overwrite with x86 mirrors. Needed after **every** `omarchy update`, indefinitely |
+| [`scripts/fix-pacman-arm.sh`](scripts/fix-pacman-arm.sh) | Restores the Arch Linux ARM pacman config that Omarchy's scripts overwrite with x86 mirrors |
+| [`scripts/fix-grub-efi-uga.sh`](scripts/fix-grub-efi-uga.sh) | Removes the `efi_uga.mod not found` pause that stops every boot on a keypress |
+
+## Ongoing maintenance
+
+Two upstream files get restored by routine package updates, so both problems come back
+**every time** that update runs — for the life of the VM. Neither is a one-time fix, and
+nothing is wrong when they reappear.
+
+| After | Symptom | Fix |
+|---|---|---|
+| `omarchy update` | `could not find database`, 404s, or `makepkg` reporting dependencies that are in fact available | `sudo ~/fix-pacman-arm.sh` |
+| a `grub` update | Every boot pauses on ``efi_uga.mod' not found`` | `sudo ~/fix-grub-efi-uga.sh` |
+
+Both scripts are idempotent and print `OK` on success, so running both after any update
+costs nothing and rules out the two known causes at once. Details, symptoms and manual
+steps are in [the checklist](notes/2026-09-03-omarchy4-parallels-checklist.md#ongoing-maintenance--two-things-that-come-back).
 
 ## The four things that actually cost time
 

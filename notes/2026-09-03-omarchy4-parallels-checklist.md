@@ -18,6 +18,48 @@ says no VMs. Treat the VM as disposable and snapshot often.
 
 ---
 
+## Ongoing maintenance — two things that come back
+
+Neither of these is a one-time fix. Both are upstream files being restored by routine
+package updates, so both return **every time** that update happens, for the life of the
+VM. Nothing is wrong when they do.
+
+### 1. After every `omarchy update` — pacman config
+
+| | |
+|---|---|
+| **Trigger** | `omarchy update`, and some of Omarchy's own setup scripts |
+| **Cause** | Omarchy's templates under `/usr/share/omarchy/default/pacman/` are x86: they set the `stable-mirror.omarchy.org` server plus `[multilib]` and `[omarchy]` repos, none of which exist for aarch64. Its scripts copy those over your live config. |
+| **Symptom** | `warning: database file for 'multilib' does not exist`, `error: failed to prepare transaction (could not find database)`, or 404s. During `makepkg` it surfaces as `ERROR: Could not resolve all dependencies` listing packages that *are* actually available. |
+| **Fix** | `sudo ~/fix-pacman-arm.sh` |
+| **Verify** | `sudo pacman -Sy` — four repos sync (`core`, `extra`, `alarm`, `aur`), no warnings |
+
+The script repairs the live config **and** overwrites Omarchy's templates, which is what
+stops it recurring within the same session. Run it any time pacman misbehaves — it is
+idempotent and safe.
+
+### 2. After every `grub` package update — the `efi_uga` boot pause
+
+| | |
+|---|---|
+| **Trigger** | A `grub` package update, which restores `/etc/grub.d/00_header` |
+| **Cause** | `00_header` emits `insmod efi_uga` unconditionally for EFI platforms. `efi_uga` is a legacy x86 module and is not shipped for arm64 at all. |
+| **Symptom** | Every boot stops with ``error: ... `/grub/arm64-efi/efi_uga.mod' not found`` and `Press any key to continue...` |
+| **Fix** | `sudo ~/fix-grub-efi-uga.sh` |
+| **Verify** | `grep -c efi_uga /boot/grub/grub.cfg` returns `0` |
+
+Harmless — the system boots either way — but it blocks each boot on a keypress.
+
+### Keeping both scripts on the VM
+
+```bash
+# on the Mac, from this repo's directory
+scp scripts/fix-pacman-arm.sh scripts/fix-grub-efi-uga.sh shahram@10.211.55.20:~/
+```
+
+Both are idempotent and print `OK` on success, so when something breaks after an update,
+running both costs nothing and rules out the two known causes in one go.
+
 ## Which machine am I on?
 
 Commands run in one of three places and the notes mark them where it is not obvious:
@@ -842,6 +884,15 @@ every boot on a keypress.
 
 `efi_gop` is the modern UEFI graphics protocol and is present, so dropping `efi_uga`
 loses nothing:
+
+Use the script — it does all of the below, idempotently, and refuses to run if a stray
+executable backup is sitting in `/etc/grub.d/`:
+
+```bash
+sudo ~/fix-grub-efi-uga.sh
+```
+
+Done by hand:
 
 ```bash
 sudo cp /etc/grub.d/00_header /root/00_header.bak      # NOT in /etc/grub.d - see below
