@@ -40,15 +40,21 @@ ISO: latest **archboot aarch64** from `release.archboot.com/aarch64/latest`
 (EU mirror: `release.archboot.eu`). Not the Omarchy ISO, not the stock Arch ISO —
 both are x86_64 only and will not boot.
 
-Parallels: new VM from the ISO, type **Other Linux**. 4 CPUs / 16 GB RAM / 64 GB disk
-worked for the original author; on an M4 Pro you can be more generous.
+Parallels: new VM from the ISO, type **Other Linux**. The original author used
+4 CPUs / 16 GB RAM / 64 GB disk on an M2 Max; on an M4 Pro be more generous.
+**Used here: 128 GB disk** — Phase 8 builds ten packages from source with `makepkg`,
+and the build trees plus the pacman cache eat more than 64 GB comfortably allows.
 
 ### Disk: attach one, on SATA
 
 **Confirmed failure on the Mac Mini run: the VM was created with no hard disk at all.**
 This is the first thing to check, ahead of any driver theory. In Parallels: Configure >
-Hardware, and make sure a **Hard Disk** device actually exists (64 GB, **SATA**,
+Hardware, and make sure a **Hard Disk** device actually exists (128 GB, **SATA 0:1**,
 expanding). Creating a VM from an ISO does not always add one.
+
+Leave **Enable TRIM** checked. With an expanding image, TRIM is how the guest tells
+Parallels which blocks it freed, so the `.hdd` on the Mac can shrink instead of only
+ever growing. See `fstrim.timer` in Phase 6 for the guest side that makes it work.
 
 If Parallels offers IDE, still prefer SATA: IDE/PATA emulation is a legacy x86
 chipset device whose Linux drivers (`ata_piix` and friends) are x86 kernel config
@@ -67,7 +73,7 @@ dmesg | grep -iE 'ahci|ata[0-9]|nvme|Direct-Access'
 Healthy output has a `SATA link up` line for the disk **and** one for the DVD, plus
 `sda` in `lsblk`. Interpretation:
 
-- `sda` present at ~64G → good, proceed.
+- `sda` present at the size you configured (128G here) → good, proceed.
 - **`lsblk` shows only `sr0` and `zram0`**, and `dmesg` shows the AHCI controller found
   (`ahci PRL4010:00`, `scsi host0..5`) with exactly one `ata2: SATA link up` for the
   `Virtual DVD-ROM` and `SATA link down` on every other port → **no disk is attached.**
@@ -187,6 +193,8 @@ Healthy output has a `SATA link up` line for the disk **and** one for the DVD, p
    | `/dev/sda1` | 512M | EFI System |
    | `/dev/sda2` | 8G | Linux swap |
    | `/dev/sda3` | rest | Linux root (ARM-64) |
+
+   EFI and swap stay these sizes regardless of disk size; root just absorbs the rest.
 
 3. Format and mount:
 
@@ -411,6 +419,15 @@ sudo ufw default allow outgoing
 sudo ufw allow 22/tcp                 # do not skip this
 sudo sed -i 's/^ENABLED=.*/ENABLED=yes/' /etc/ufw/ufw.conf
 sudo systemctl enable ufw
+```
+
+**[+] Enable periodic TRIM** so the Parallels expanding disk can actually shrink. The
+`discard` mount option is the wrong way — it trims inline on every delete and costs
+performance. Use the timer:
+
+```bash
+sudo systemctl enable --now fstrim.timer
+systemctl status fstrim.timer      # runs weekly
 ```
 
 Then run setup — system as root, user as yourself:
