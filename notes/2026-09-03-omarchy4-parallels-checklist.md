@@ -761,6 +761,40 @@ Two packages need special handling:
 
 ---
 
+## Phase 9 — Verify after the first reboot
+
+```bash
+# all ten present
+for p in aether cliamp localsend mise python-terminaltexteffects ttf-ia-writer \
+         ufw-docker xdg-terminal-exec yaru-icon-theme yay; do
+  if pacman -Qi "$p" &>/dev/null || pacman -Qq | grep -qx "${p}-bin"; then
+    echo "OK:      $p"; else echo "MISSING: $p"; fi
+done
+```
+
+`localsend` and `yay` install as `-bin` packages, hence the second test.
+
+Then reboot and check three things — it is the first boot with `ufw` active and all ten
+packages present:
+
+1. **SSH still works** — proves the `allow 22/tcp` rule landed. If not, the Parallels
+   console still works and `sudo ufw allow 22/tcp` fixes it.
+2. **The terminal opens** from its keybinding.
+3. **Keybindings do not fire "command not found"** notifications.
+
+**Expected on first boot: an `App failure — Command not found: "xdg-terminal-exec"`
+notification.** Seen on this run and harmless — the terminal keybinding works fine once
+the desktop has settled. The binary is at `/usr/bin/xdg-terminal-exec` and
+`command -v` resolves it; the notification comes from something started during login
+before that resolves, and did not recur. Only investigate if the keybinding itself
+actually fails:
+
+```bash
+pacman -Ql xdg-terminal-exec | grep -E '/bin/'   # is it on disk?
+systemctl --user show-environment | grep -i '^PATH'
+hyprctl dispatch exec xdg-terminal-exec          # run it inside the Hyprland session
+```
+
 ## Permanent limitations — accept these before starting
 
 - `omarchy update` restores the x86 pacman templates. Re-run `fix-pacman-arm.sh` every time.
@@ -770,6 +804,24 @@ Two packages need special handling:
 - Package signature verification is off (`SigLevel = Never`) and there is no disk
   encryption. This VM is not a place for real credentials.
 - Unsupported by both upstreams. If it breaks, you own it.
+
+## Outcome
+
+**Completed 2026-09-03 on the Mac Mini M4 Pro.** Omarchy 4.0.1-mac.1 on Arch Linux ARM,
+128 GB SATA disk, 8 CPUs / 32 GB RAM, Parallels shared networking. Desktop comes up with
+waybar and workspaces, terminal opens, all ten source-built packages installed.
+
+The install itself was straightforward; effectively all the lost time went to four
+things, all now documented above:
+
+1. The VM's disk device existed but was **disabled** (`hdd0 (-)`), invisible from inside
+   the guest — see the `prlctl` check in Phase 1.
+2. archboot's NIC starts **DOWN** and its sshd refuses **password auth**, so the SSH
+   setup could not work as originally written.
+3. `$VMUSER` did not survive into the chroot, so the install finished with **no user
+   account** — which surfaced two steps later as an SSH `Permission denied`.
+4. Omarchy re-broke pacman before Phase 8, making five of seven builds fail with
+   **misleading "missing dependencies"** errors naming packages that were available.
 
 ## Open questions / to verify on this machine
 
