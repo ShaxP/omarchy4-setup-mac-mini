@@ -66,6 +66,38 @@ chipset device whose Linux drivers (`ata_piix` and friends) are x86 kernel confi
 options and are generally not built into aarch64 kernels. SATA also gives you
 `/dev/sda`, which is what every command in this checklist assumes.
 
+### Fastest check: ask Parallels, not the guest
+
+The GUI can show a fully configured 128 GB disk that the VM is not actually using.
+Read the real config from the Mac instead — one command settles it:
+
+```bash
+prlctl list -i "Omarchy 4" | grep -E 'hdd0|cdrom0'
+```
+
+```
+hdd0   (-) sata:0  image='.../Omarchy 4-0.hdd' type='expanded' 131072Mb   <- DISABLED
+cdrom0 (+) sata:1  image='.../archboot-...iso'
+```
+
+**`(-)` means the device is disabled, `(+)` means enabled.** This was the actual fault on
+the Mac Mini run: the disk existed, was the right size, sat on the right port, and was
+switched off. The guest saw an empty SATA port and no amount of guest-side debugging
+would have shown why. Fix it with the VM stopped:
+
+```bash
+prlctl set "Omarchy 4" --device-set hdd0 --enable --connect
+prlctl list -i "Omarchy 4" | grep hdd0        # must now read (+)
+```
+
+A disabled `hdd0` also makes its location unavailable in the GUI dropdown — `hdd0`
+still owns `sata:0`, so `SATA 0:0` is not offered as a free slot for a new disk. If the
+location you want is greyed out, suspect this rather than adding a second disk.
+
+Other things this output settles at a glance: whether `hdd0` exists at all, its
+interface (`sata:` vs `ide:`), and its size in Mb (`131072Mb` = 128 GB). An image of a
+megabyte or so is a normal empty expanding disk, not a broken one.
+
 ### Before partitioning, confirm the disk is really there
 
 Run this in the archboot shell:
