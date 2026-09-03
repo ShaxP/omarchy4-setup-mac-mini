@@ -116,21 +116,58 @@ Interpretation:
      Parallels (Actions > Configure > Hardware > Network, enabled, Shared Network), not
      in the guest. Nothing is installed yet, so power off and reboot the ISO freely.
 
-   **Then bring up SSH:**
+   **Then bring up SSH.** This took several rounds on the first run — archboot's sshd
+   does **not** accept password logins out of the box. Do all of it before testing:
 
    ```bash
    passwd                            # sshd refuses empty-password logins
-   ssh-keygen -A
-   sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
-   systemctl start sshd
-   systemctl is-active sshd          # -> active
-   ss -tlnp | grep ':22'             # -> LISTEN
+   ssh-keygen -A                     # host keys, if missing
+
+   # archboot ships PasswordAuthentication no. Find where it is set:
+   grep -rniE '^\s*(PasswordAuthentication|PermitRootLogin)' \
+     /etc/ssh/sshd_config /etc/ssh/sshd_config.d/ 2>/dev/null
+   # ...then flip it in whichever file that names:
+   sed -i 's,^\s*PasswordAuthentication.*,PasswordAuthentication yes,' <that-file>
+   sed -i 's,^\s*PermitRootLogin.*,PermitRootLogin yes,'               <that-file>
+
+   systemctl restart sshd
+   ```
+
+   **Verify the effective config, not the file** — `sshd_config` usually starts with
+   `Include /etc/ssh/sshd_config.d/*.conf`, OpenSSH takes the **first** value it obtains
+   for a directive, so an edit to the main file can be silently overridden by a drop-in:
+
+   ```bash
+   sshd -T | grep -iE 'permitrootlogin|passwordauthentication|^port'
+   ss -tlnp | grep -i ssh            # confirm 0.0.0.0:22, not 127.0.0.1:22
+   ```
+
+   All three must read `yes` / `yes` / `22`. Do not trust `grep` on the config file.
+   If the grep above found nothing to edit, a drop-in that sorts first wins:
+
+   ```bash
+   printf 'PasswordAuthentication yes\nPermitRootLogin yes\n' > /etc/ssh/sshd_config.d/00-root.conf
+   systemctl restart sshd
    ```
 
    Then from the Mac: `ssh root@<address>`.
 
-   - No `sshd`? `pacman -Sy --noconfirm openssh` — run the step 4 `SigLevel` fix first
-     if it errors on signatures.
+   All of this is throwaway — it configures the live ISO's sshd, not the installed
+   system's. The installed system (step 6) is stock and needs none of it.
+
+   **Reading the failures:**
+
+   - `Permission denied (publickey).` → password auth still off. Re-check `sshd -T`.
+   - `Permission denied (publickey,password,...)` after a prompt → auth is on, the
+     password is wrong or root has none. Run `passwd`.
+   - `Connection refused` → nothing listening. Check `ss -tlnp` and `journalctl -u sshd -n 30`.
+   - `No route to host` → seen once on the first run and never fully explained. ARP was
+     healthy (`arp -n <ip>` complete, `00:1c:42` Parallels OUI) and the guest had no
+     firewall (`iptables -S` all-ACCEPT, no rules), yet it failed; it cleared after the
+     sshd fixes above. If you hit it: confirm `ping -c3 <ip>` from the Mac, check
+     `arp -n <ip>` is not `(incomplete)`, then just retry once networking has settled.
+   - No `sshd` binary? `pacman -Sy --noconfirm openssh` — run the step 4 `SigLevel` fix
+     first if it errors on signatures.
    - Curses programs (`cfdisk`) unhappy over SSH? `export TERM=xterm-256color`.
 
    This session ends at the step 7 reboot — it is the live ISO's sshd, not the installed
