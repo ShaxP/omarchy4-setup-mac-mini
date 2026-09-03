@@ -266,6 +266,8 @@ Healthy output has a `SATA link up` line for the disk **and** one for the DVD, p
 
    ```bash
    export TERM=linux
+   export VMUSER=shahram     # [+] MUST be re-exported: the outer shell's value does
+                             #     not reliably survive into the chroot
    sed -i 's/^\s*SigLevel.*/SigLevel = Never/' /etc/pacman.conf   # again, new system
    ln -sf /usr/share/zoneinfo/Europe/Stockholm /etc/localtime && hwclock --systohc
    sed -i 's/^#en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && locale-gen
@@ -278,9 +280,29 @@ Healthy output has a `SATA link up` line for the disk **and** one for the DVD, p
    cp /boot/EFI/GRUB/grubaa64.efi /boot/EFI/BOOT/BOOTAA64.EFI
    grub-mkconfig -o /boot/grub/grub.cfg
    useradd -m -G wheel "$VMUSER" && passwd "$VMUSER"
+   id "$VMUSER"              # [+] verify NOW - see below
    EDITOR=nano visudo        # opens an editor - see "visudo" below, do not just paste on
    systemctl enable NetworkManager
    systemctl enable sshd     # [+] up on first boot, no console typing needed
+   ```
+
+   **[+] Confirm the user actually exists before moving on.** On the Mac Mini run
+   `$VMUSER` was empty inside the chroot, so `useradd -m -G wheel ""` failed silently
+   in the middle of a pasted block and the install completed with no user account at
+   all — which does not surface until you try to SSH in after the reboot and get
+   `Permission denied` (the password prompt appears even for accounts that do not
+   exist, so it looks like a wrong password, not a missing user):
+
+   ```bash
+   getent passwd "$VMUSER"   # must return a line
+   id "$VMUSER"              # must list wheel
+   ```
+
+   If it is missing, just create it — nothing else depends on the ordering:
+
+   ```bash
+   useradd -m -G wheel shahram
+   passwd shahram
    ```
 
    **`visudo` opens nano and waits for you.** This is the one command in the block that
