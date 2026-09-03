@@ -17,6 +17,19 @@ says no VMs. Treat the VM as disposable and snapshot often.
 
 ---
 
+## Which machine am I on?
+
+Commands run in one of three places and the notes mark them where it is not obvious:
+
+- **Mac** — `prlctl`, `scp`, `ssh`. Run from this repo's directory when a path is
+  relative (`scripts/fix-pacman-arm.sh` only exists here, not in the VM).
+- **VM console** — the Parallels window. Needed only before SSH works, and when the
+  network is down.
+- **VM over SSH** — everything else.
+
+`VMUSER` / `VMHOST` are shell variables, so they exist only in the shell you exported
+them in. Export them on **both** machines, or use literals for one-off commands.
+
 ## 0. Fill these in first
 
 Set these once in each shell you work from. Every command below uses them, so you
@@ -405,6 +418,7 @@ echo 'export TERM=xterm-256color' >> ~/.bashrc
 **[+]** Copy the helper script over now, before Omarchy has a chance to break pacman:
 
 ```bash
+cd /Users/shahram/source/repos/omarchy4-setup-mac-mini   # on the Mac
 scp scripts/fix-pacman-arm.sh $VMUSER@$VMHOST:~/
 ```
 
