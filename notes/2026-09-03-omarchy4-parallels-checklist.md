@@ -86,8 +86,39 @@ Interpretation:
    no clipboard into the Parallels console, and every command from here on is long.
    Archboot is designed for remote installs, so `openssh` is already on the ISO:
 
+   **Network first — the interface comes up DOWN.** Confirmed on this VM: archboot does
+   not bring the NIC up on its own, so there is no address until you do it by hand. This
+   is the actual first command, not a troubleshooting step:
+
    ```bash
-   ip -4 addr show scope global      # Parallels NAT usually gives 10.211.55.x
+   ip link                           # find the NIC; on Parallels it is usually enp0s5
+   ip link set enp0s5 up             # <- it starts DOWN. This is the bit that is missing.
+   systemctl start systemd-networkd systemd-resolved
+   sleep 3
+   ip -4 addr show scope global      # expect 10.211.55.x
+   ```
+
+   Still no address after that? Run a DHCP client directly, whichever exists:
+   `dhcpcd enp0s5`, or `dhclient enp0s5`.
+
+   Verify in two stages, because they fail differently:
+
+   ```bash
+   ping -c2 1.1.1.1                  # raw connectivity
+   ping -c2 archlinux.org            # DNS
+   ```
+
+   - Address but no ping to `1.1.1.1` → routing. Check `ip route` for a default via
+     `10.211.55.1`; add it with `ip route add default via 10.211.55.1` if missing.
+   - `1.1.1.1` pings but names do not resolve → DNS only.
+     `echo 'nameserver 1.1.1.1' > /etc/resolv.conf`.
+   - `ip link` shows **only `lo`** → no NIC is attached to the VM at all. Fix it in
+     Parallels (Actions > Configure > Hardware > Network, enabled, Shared Network), not
+     in the guest. Nothing is installed yet, so power off and reboot the ISO freely.
+
+   **Then bring up SSH:**
+
+   ```bash
    passwd                            # sshd refuses empty-password logins
    ssh-keygen -A
    sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
@@ -98,8 +129,6 @@ Interpretation:
 
    Then from the Mac: `ssh root@<address>`.
 
-   - No address? The Parallels NIC is usually `enp0s5`. Try
-     `systemctl start systemd-networkd systemd-resolved`, or `dhcpcd enp0s5`.
    - No `sshd`? `pacman -Sy --noconfirm openssh` — run the step 4 `SigLevel` fix first
      if it errors on signatures.
    - Curses programs (`cfdisk`) unhappy over SSH? `export TERM=xterm-256color`.
