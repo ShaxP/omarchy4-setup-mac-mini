@@ -1,7 +1,8 @@
 # Omarchy 4 (Quattro) on Mac Mini M4 Pro / Parallels — working checklist
 
 Date: 2026-09-03
-Target: Omarchy 4.0.0-mac.* on Arch Linux ARM (aarch64) in Parallels Desktop
+Target: Omarchy 4.0.x-mac.* on Arch Linux ARM (aarch64) in Parallels Desktop
+Installed: **4.0.1-mac.1** (guide was written against 4.0.0-mac.6; no differences hit so far)
 Host: Mac Mini M4 Pro
 
 Based on [u/antipop2's r/omarchy guide](https://www.reddit.com/r/omarchy/comments/1vrpp7b/40_running_in_parallels/)
@@ -521,7 +522,7 @@ grep -vxE 'aether|cliamp|localsend|mise|python-terminaltexteffects|ttf-ia-writer
   repo.packages > repo.final
 sudo pacman -Syu --needed --noconfirm $(cat repo.final)
 sudo pacman -U --needed *.pkg.tar.xz
-cat /usr/share/omarchy/version        # must print 4.0.0-mac.*
+cat /usr/share/omarchy/version        # 4.0.x-mac.* - got 4.0.1-mac.1 on this run
 ```
 
 > Snapshot: `phase-5-omarchy-installed`
@@ -704,6 +705,6 @@ Two packages need special handling:
 ## Open questions / to verify on this machine
 
 - [ ] Confirm the missing-package list matches the 10 above (Phase 5 check loop).
-- [ ] The source guide is one person's log on an M2 Max, ~2026-08-18, pinned to
-      4.0.0-mac.6. Check `/usr/share/omarchy/version` against what the bundle actually
-      delivers and note any drift here.
+- [x] Version drift: guide was 4.0.0-mac.6, this run got **4.0.1-mac.1** — same
+      version the user installed on the M1 Pro MacBook. Nothing in the guide has
+      needed adjusting for it so far.
