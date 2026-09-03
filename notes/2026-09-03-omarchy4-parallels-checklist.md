@@ -52,6 +52,11 @@ This is the first thing to check, ahead of any driver theory. In Parallels: Conf
 Hardware, and make sure a **Hard Disk** device actually exists (128 GB, **SATA 0:1**,
 expanding). Creating a VM from an ISO does not always add one.
 
+**Boot order:** during the install, **CD/DVD first, Hard Disk second** — the ISO has to
+win and the empty disk falls through harmlessly. After step 7, flip to **Hard Disk
+first** and disconnect the ISO. Leave Network/PXE out of the list entirely; it only adds
+a boot timeout.
+
 Leave **Enable TRIM** checked. With an expanding image, TRIM is how the guest tells
 Parallels which blocks it freed, so the `.hdd` on the Mac can shrink instead of only
 ever growing. See `fstrim.timer` in Phase 6 for the guest side that makes it work.
@@ -237,6 +242,8 @@ Healthy output has a `SATA link up` line for the disk **and** one for the DVD, p
    mkinitcpio -P
    passwd
    grub-install --target=arm64-efi --efi-directory=/boot --bootloader-id=GRUB
+   mkdir -p /boot/EFI/BOOT                                   # [+] see below
+   cp /boot/EFI/GRUB/grubaa64.efi /boot/EFI/BOOT/BOOTAA64.EFI
    grub-mkconfig -o /boot/grub/grub.cfg
    useradd -m -G wheel "$VMUSER" && passwd "$VMUSER"
    EDITOR=nano visudo        # uncomment: %wheel ALL=(ALL:ALL) ALL
@@ -244,7 +251,14 @@ Healthy output has a `SATA link up` line for the disk **and** one for the DVD, p
    systemctl enable sshd     # [+] up on first boot, no console typing needed
    ```
 
-7. Exit chroot, reboot, **disconnect the ISO in Parallels**. GRUB prints
+   **[+] Why the extra copy:** `--bootloader-id=GRUB` writes `/EFI/GRUB/grubaa64.efi`
+   and an NVRAM boot entry. Some UEFI firmware ignores the NVRAM entry and only looks
+   at the removable-media fallback path `/EFI/BOOT/BOOTAA64.EFI`, which gives you a VM
+   that installs cleanly and then refuses to boot. The copy costs nothing if the NVRAM
+   entry works. (`grub-install --removable` does the same thing in one step.)
+
+7. Exit chroot, reboot, **disconnect the ISO in Parallels** and set Hard Disk first in
+   the boot order. GRUB prints
    `efi_uga.mod not found` — harmless, press any key.
 
 > Snapshot: `phase-1-base`
