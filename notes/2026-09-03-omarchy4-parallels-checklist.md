@@ -741,9 +741,21 @@ Two packages need special handling:
   `gtk-engine-murrine`, absent from ALARM, so a group install fails. Only the icons are
   needed, and two of its files collide with `omarchy-dev`:
   ```bash
-  cd ~/omarchy-pkgs/pkgbuilds/yaru-icon-theme && makepkg -f
+  cd ~/omarchy-pkgs/pkgbuilds/yaru-icon-theme
+  sudo pacman -S --needed --noconfirm meson sassc     # build deps, install by hand
+  makepkg -f --nodeps
+  ls *.pkg.tar.*                                      # see what was actually produced
   sudo pacman -U --overwrite '*' yaru-icon-theme-*.pkg.tar.*
   ```
+
+  Why not just `makepkg -sf`: `-s` resolves dependencies across **all** outputs of the
+  split package, including `yaru-gtk-theme`'s `gtk-engine-murrine`, which ALARM does not
+  have — so it fails. `--nodeps` skips that check, which is safe because
+  `gtk-engine-murrine` is a runtime dependency of the GTK theme and is not needed to
+  build. `meson` and `sassc` genuinely are needed at build time, hence installing them
+  first. Plain `makepkg -f` (no `-s`) installs nothing and stops on those two, building
+  no package at all — after which the `pacman -U` glob matches nothing and reports
+  `could not find or read package`, which looks like a second, separate failure.
 
 > Snapshot: `phase-8-complete`
 
