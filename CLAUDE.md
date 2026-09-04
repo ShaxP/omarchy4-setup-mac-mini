@@ -35,3 +35,9 @@ community path:
 
 The user already ran these instructions once on a MacBook Pro (M1 Pro). It worked but was
 cumbersome and slow. The goal for the Mac Mini run is fewer dead ends, not more explanation.
+
+## Open work
+
+`omarchy update` does not yet complete on this VM. Current state, findings and next
+steps: `notes/handoff-update-troubleshooting.md`. Read it before touching anything
+update-related.
