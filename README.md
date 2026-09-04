@@ -21,7 +21,8 @@ Desktop, terminal and keybindings all working.
 
 | | |
 |---|---|
-| [`notes/`](notes/) | The checklist — 9 phases, every command, every failure and its cause |
+| [`notes/`](notes/) | The install checklist — 9 phases, every command, every failure and its cause |
+| [`notes/omarchy-update-checklist.md`](notes/omarchy-update-checklist.md) | How to run `omarchy update` without breaking the VM, and why it breaks |
 | [`scripts/fix-pacman-arm.sh`](scripts/fix-pacman-arm.sh) | Restores the Arch Linux ARM pacman config that Omarchy's scripts overwrite with x86 mirrors |
 | [`scripts/fix-grub-efi-uga.sh`](scripts/fix-grub-efi-uga.sh) | Removes the `efi_uga.mod not found` pause that stops every boot on a keypress |
 
@@ -37,7 +38,13 @@ nothing is wrong when they reappear.
 | a `grub` update | Every boot pauses on ``efi_uga.mod' not found`` | `sudo ~/fix-grub-efi-uga.sh` |
 
 Both scripts are idempotent and print `OK` on success, so running both after any update
-costs nothing and rules out the two known causes at once. Details, symptoms and manual
+costs nothing and rules out the two known causes at once.
+
+**The pacman one may be avoidable.** It turns out `omarchy-refresh-pacman` explicitly
+refuses to touch an Apple Silicon system — the config only gets overwritten because
+Parallels exposes no device tree, so Omarchy's hardware detection cannot tell it is on
+ARM and takes the x86 path. A small shim making that detection succeed appears to fix it
+at the source. See the [update checklist](notes/omarchy-update-checklist.md). Details, symptoms and manual
 steps are in [the checklist](notes/2026-09-03-omarchy4-parallels-checklist.md#ongoing-maintenance--two-things-that-come-back).
 
 ## The four things that actually cost time
