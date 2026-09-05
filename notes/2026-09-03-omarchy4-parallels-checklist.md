@@ -18,17 +18,23 @@ says no VMs. Treat the VM as disposable and snapshot often.
 
 ---
 
-## Ongoing maintenance — two things that come back
+## Ongoing maintenance — two things that can come back
 
-Neither of these is a one-time fix. Both are upstream files being restored by routine
-package updates, so both return **every time** that update happens, for the life of the
-VM. Nothing is wrong when they do.
+Neither is a one-time fix; both are upstream files that Omarchy's own scripts restore.
+But see the correction below — the pacman one turned out **not** to recur on update.
 
-### 1. After every `omarchy update` — pacman config
+### 1. When pacman breaks — pacman config
+
+> **Corrected 2026-09-05.** This section originally said `omarchy update` restores the
+> x86 templates every time, forever. It does not. Nothing in the update path calls
+> `omarchy-refresh-pacman`, and a full update left `mirrorlist` and `pacman.conf`
+> untouched. The trigger is Omarchy's `install/` scripts and its menu — which is why this
+> bit repeatedly during install and not since. Treat `fix-pacman-arm.sh` as a recovery
+> tool. Details in [the update checklist](omarchy-update-checklist.md).
 
 | | |
 |---|---|
-| **Trigger** | `omarchy update`, and some of Omarchy's own setup scripts |
+| **Trigger** | Omarchy's `install/` scripts and menu actions that call `omarchy-refresh-pacman`. **Not** `omarchy update`. |
 | **Cause** | Omarchy's templates under `/usr/share/omarchy/default/pacman/` are x86: they set the `stable-mirror.omarchy.org` server plus `[multilib]` and `[omarchy]` repos, none of which exist for aarch64. Its scripts copy those over your live config. |
 | **Symptom** | `warning: database file for 'multilib' does not exist`, `error: failed to prepare transaction (could not find database)`, or 404s. During `makepkg` it surfaces as `ERROR: Could not resolve all dependencies` listing packages that *are* actually available. |
 | **Fix** | `sudo ~/fix-pacman-arm.sh` |
@@ -515,8 +521,14 @@ The correct state it writes:
 > **Do NOT run `curl https://omarchy.org/install | bash`.** Its first action is
 > overwriting your mirrorlist with the x86 mirror, and it fails anyway.
 
-> `omarchy update` restores the x86 templates. Re-run `fix-pacman-arm.sh` after
-> **every** update. Forever. This does not go away.
+> Re-run `fix-pacman-arm.sh` whenever pacman misbehaves during install. It is idempotent
+> and safe. It is *not* needed after `omarchy update` — see the correction above.
+>
+> **Untested hypothesis:** `omarchy-refresh-pacman` refuses to run when Apple Silicon
+> detection succeeds, so making detection work *before* Phase 3 might prevent this
+> breakage during install entirely. `scripts/enable-arm-detection.sh` does that, but it
+> was never trialled on an install and carries its own cost — read
+> [the detection note](2026-09-05-apple-silicon-detection.md) before trying it.
 
 ---
 
@@ -920,7 +932,12 @@ the graphical menu back.
 
 ## Permanent limitations — accept these before starting
 
-- `omarchy update` restores the x86 pacman templates. Re-run `fix-pacman-arm.sh` every time.
+- Omarchy itself never updates: the signed bundle step is gated on Apple Silicon
+  detection, which cannot succeed in Parallels. System packages update fine. See
+  [the detection note](2026-09-05-apple-silicon-detection.md).
+- Arch Linux ARM lags Arch on rebuilds, so a soname bump in `[extra]` can block
+  `pacman -Syu` until ALARM catches up. Hold the offending package; see
+  [the update checklist](omarchy-update-checklist.md).
 - **No Parallels Tools on ARM Arch:** no clipboard sync with macOS, no dynamic
   resolution, single display only. SSH for text, the GRUB `video=` parameter for resolution.
 - x86-only apps in Omarchy's catalog (Spotify, 1Password, and similar) cannot be installed.

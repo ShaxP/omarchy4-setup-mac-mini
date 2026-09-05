@@ -36,8 +36,21 @@ community path:
 The user already ran these instructions once on a MacBook Pro (M1 Pro). It worked but was
 cumbersome and slow. The goal for the Mac Mini run is fewer dead ends, not more explanation.
 
+## Update status (resolved 2026-09-04)
+
+`omarchy update` completes on this VM. Read `notes/omarchy-update-checklist.md` before
+touching anything update-related — it carries the procedure and a per-update findings log.
+
+Two things to know going in:
+
+- Apple Silicon detection fails in Parallels and that is **fine and deliberate**. It is
+  not a blocker, and `scripts/enable-arm-detection.sh` is written but intentionally not
+  applied. Reasoning: `notes/2026-09-05-apple-silicon-detection.md`.
+- Consequence: system packages update, but Omarchy itself stays frozen at the installed
+  bundle (`4.0.0.r6673.g5939caf`). Moving it is a manual job.
+
 ## Open work
 
-`omarchy update` does not yet complete on this VM. Current state, findings and next
-steps: `notes/handoff-update-troubleshooting.md`. Read it before touching anything
-update-related.
+- `IgnorePkg = aquamarine` is held in `/etc/pacman.conf` and in
+  `scripts/fix-pacman-arm.sh`, working around an Arch Linux ARM soname lag. Remove from
+  both once `pacman -Si hyprland | grep aquamarine` reports `so=14`.

@@ -1,107 +1,109 @@
 # Running `omarchy update` on Arch Linux ARM in Parallels
 
-How to update this VM without breaking it, and why the usual breakage happens at all.
+How to update this VM without breaking it.
 
-Companion to [the install checklist](2026-09-03-omarchy4-parallels-checklist.md).
+Companion to [the install checklist](2026-09-03-omarchy4-parallels-checklist.md) and
+[the detection note](2026-09-05-apple-silicon-detection.md).
+
+**Status: `omarchy update` works on this VM as-is.** It completed cleanly on 2026-09-04
+with hardware detection still failing and no workarounds applied. See the Findings log.
 
 ---
 
-## The root cause: failed hardware detection
+## What we expected to be wrong, and wasn't
 
-Everything that goes wrong on update traces back to one script:
+Two assumptions carried from the install phase turned out not to hold for
+`omarchy-dev 4.0.0.r6673.g5939caf-1`. Both were reasoning, not measurement, and both are
+now measured.
 
-```bash
-# /usr/bin/omarchy-hw-apple-silicon
-proc_root="${OMARCHY_PROC_ROOT:-/proc}"
-[[ $(uname -m) == "aarch64" ]] &&
-  grep -aq 'apple,' "$proc_root/device-tree/compatible" 2>/dev/null
-```
+### `omarchy update` does not rewrite pacman config
 
-**Parallels exposes no device tree at all** — `/proc/device-tree/compatible` does not
-exist in the guest — so this returns non-zero and Omarchy concludes it is running on an
-ordinary x86 desktop. On a real Mac (bare metal Asahi) it returns 0.
+The install notes say the x86 pacman templates come back after every update, forever.
+They did not. `/etc/pacman.d/mirrorlist` has not been modified since install day, and
+`/etc/pacman.conf` was only touched by our own `sed`.
 
-That single result gates the ARM behaviour across the whole system:
-
-```
-/usr/bin/omarchy-refresh-pacman
-/usr/bin/omarchy-update-system-pkgs
-/usr/bin/omarchy-update-asahi-bundle
-/usr/bin/omarchy-update-keyring
-/usr/bin/omarchy-update-aur-pkgs
-/usr/bin/omarchy-migrate
-/usr/share/omarchy/install/hardware/pacman.sh
-/usr/share/omarchy/install/post-install/pacman.sh
-...and ~10 more
-```
-
-Most importantly, `omarchy-refresh-pacman` **already refuses to damage an ARM system**:
+The reason is structural, not luck. `omarchy-refresh-pacman` is the only script that
+rewrites pacman config, and **nothing in the update path calls it**:
 
 ```bash
-if omarchy-hw-apple-silicon; then
-  echo "Error: Omarchy package channels are not available for Apple Silicon; \
-preserving the existing Arch Linux ARM repositories" >&2
-  exit 1
-fi
+grep -n 'refresh-pacman' /usr/bin/omarchy-update /usr/bin/omarchy-update-*   # no matches
 ```
 
-So the pacman config was never being overwritten because ARM is unsupported. It was
-overwritten because Omarchy could not tell it was on ARM. **This is a detection bug in a
-VM, not an incompatibility.**
+It is reachable from the Omarchy menu and from `install/`, which is why it bit us during
+install. It is not part of `omarchy update`.
 
-## The fix: a detection shim
+**So `fix-pacman-arm.sh` is not routine post-update hygiene.** It is a recovery tool.
+Run it when pacman is actually broken, not on a schedule.
 
-`OMARCHY_PROC_ROOT` works but is fragile — many of these scripts are `requires-sudo`,
-and `sudo` strips the environment. A shim in `/usr/local/bin` survives that, because
-that directory precedes `/usr/bin` both in a normal `PATH` and in sudo's `secure_path`
-(`/usr/local/sbin:/usr/local/bin:/usr/bin` on Arch).
+### Hardware detection is not required for an update to succeed
+
+Detection still fails here — Parallels exposes no device tree, so
+`omarchy-hw-apple-silicon` returns 2. The update path therefore skips its ARM branch. It
+completed anyway, because on this VM the ARM branch's main effect is a no-op.
+
+That branch adds `--ignore` for six packages in `omarchy-update-system-pkgs` and
+`omarchy-update-aur-pkgs`. All six are **foreign** packages — installed from the
+downloaded bundle, present in no configured repo:
 
 ```bash
-sudo tee /usr/local/bin/omarchy-hw-apple-silicon >/dev/null <<'EOF'
-#!/bin/bash
-# Shim: Parallels exposes no device tree, so the stock check cannot detect Apple
-# Silicon in a VM. This host IS Apple Silicon (arm64 guest on an M4 Pro), so report
-# true and let Omarchy take its ARM paths. Remove this file for stock behaviour.
-[[ $(uname -m) == "aarch64" ]]
-EOF
-sudo chmod +x /usr/local/bin/omarchy-hw-apple-silicon
-
-omarchy-hw-apple-silicon;      echo "user exit: $?"    # want 0
-sudo omarchy-hw-apple-silicon; echo "sudo exit: $?"    # want 0
+pacman -Qm | grep -E 'omarchy|quickshell|jetbrains'
+#   omarchy-dev  omarchy-keyring  omarchy-nvim
+#   omarchy-settings-dev  quickshell-git  ttf-jetbrains-mono-nerd-basic
+grep -c '^\[omarchy\]' /etc/pacman.conf   # 0
+yay -Si omarchy-dev                       # -> No AUR package found for omarchy-dev
 ```
 
-Both must be `0`. The `aarch64` guard means it cannot claim ARM on the wrong machine.
+`pacman -Syu` cannot upgrade a package that exists in no repo, and `yay -Sua` cannot
+upgrade one that is not in the AUR. **Nothing can overwrite the aarch64 bundle packages,
+so there is nothing for `--ignore` to protect.** That was the "whole ballgame" claim in
+the old handoff note; it was wrong.
 
-**Undo:** `sudo rm /usr/local/bin/omarchy-hw-apple-silicon`
+The one thing detection genuinely gates is the signed bundle step — new *Omarchy*
+versions. Without it, the bundle packages stay frozen at whatever was installed. See
+[the detection note](2026-09-05-apple-silicon-detection.md) for why turning it on right
+now would make updates **less** reliable, not more.
 
-### What this changes about `fix-pacman-arm.sh`
+## What actually went wrong instead
 
-`scripts/fix-pacman-arm.sh` writes exactly four repos and strips `[omarchy]`. That was
-correct for a system whose detection was broken. With the shim in place it is **partly
-wrong**: `install/hardware/pacman.sh` deliberately adds an `[omarchy]` repo pointing at
-the *aarch64* release server, with a verified GPG key —
+Not Omarchy. Arch Linux ARM shipped an internally inconsistent `[extra]`:
 
 ```
-[omarchy]
-SigLevel = Required DatabaseOptional
-Server = https://github.com/maralcbr/omarchy-pkgs/releases/download/asahi-packages-<tag>
+:: unable to satisfy dependency 'libaquamarine.so=13-64' required by hyprtoolkit
+:: installing aquamarine (0.15.0-2) breaks dependency 'libaquamarine.so=13-64' required by hyprland
+error: failed to prepare transaction (could not satisfy dependencies)
 ```
 
-— which is legitimate and wanted. Running the fix script after a successful shimmed
-update would delete it. **With the shim working, treat `fix-pacman-arm.sh` as a recovery
-tool for when detection is broken, not as routine post-update hygiene.**
+`aquamarine 0.15.0-2` bumped its soname to `libaquamarine.so=14`, but ALARM had not yet
+rebuilt `hyprland` or `hyprtoolkit`, which still require `so=13`. Nothing in any repo
+requires `so=14`, so the new aquamarine is currently uninstallable on ALARM. This would
+hit any Omarchy ARM machine, VM or not.
 
-### Residual risk
+Omarchy's `omarchy-update-system-pkgs-when-conflicted` only recovers from
+`unresolvable package conflicts detected` and `exists in filesystem`. A dependency
+*resolution* failure is neither, so it correctly refused to guess and aborted the whole
+update. Nothing was installed — it failed at transaction preparation.
 
-The Asahi hardware scripts (`install/hardware/apple/fix-brcmfmac-supplicant.sh`,
-`fix-asahi-hid-race.sh`) are gated on the same detection and will now believe they
-apply. They target Broadcom WiFi firmware and an Asahi HID race, neither of which exists
-in a VM, so they should no-op or fail harmlessly — but that is reasoning, not evidence.
-Watch for them in the update log.
+**Fix — hold the offending package.** `omarchy update` exposes no `--ignore`, so it goes
+in the config:
 
-`omarchy-setup-direct-boot` is also gated on the detection and *is* bootloader territory,
-but it is reachable only from the Omarchy menu (`omarchy-menu.jsonc`), never from the
-update path. Do not run it in a VM.
+```bash
+sudo sed -i '/^LocalFileSigLevel/a IgnorePkg         = aquamarine' /etc/pacman.conf
+```
+
+This is temporary and must be removed once ALARM catches up, or the compositor stack
+silently rots. Check periodically:
+
+```bash
+pacman -Si hyprland | grep aquamarine     # when this says so=14, drop the hold
+sudo sed -i '/^IgnorePkg.*aquamarine/d' /etc/pacman.conf
+```
+
+`fix-pacman-arm.sh` carries the same hold, because it rewrites `pacman.conf` wholesale
+and would otherwise silently drop it. Remove it from both places at the same time.
+
+> **General rule.** A dependency failure naming two packages from `[extra]` is an
+> upstream ALARM lag, not an Omarchy problem. Confirm with
+> `pacman -Su --print --ignore <pkg>`; if that resolves cleanly, hold `<pkg>` and move on.
 
 ---
 
@@ -117,16 +119,17 @@ prlctl snapshot-list "Omarchy 4"
 
 ```bash
 # VM - record the starting state so any change is attributable
-cat /usr/share/omarchy/version
-cat /var/lib/omarchy/asahi-quattro-release 2>/dev/null
+pacman -Q omarchy-dev
 pacman -Q | wc -l
 grep -c efi_uga /boot/grub/grub.cfg          # 0 if the GRUB patch is in place
 sudo pacman -Sy                              # must be clean before starting
-omarchy-hw-apple-silicon; echo "exit: $?"    # must be 0 - the shim is the whole point
 ```
 
 If `pacman -Sy` is *not* clean before you start, fix that first
 (`sudo ~/fix-pacman-arm.sh`) — otherwise you cannot tell what the update broke.
+
+Detection is **not** a pre-flight requirement. `omarchy-hw-apple-silicon` returning
+non-zero is the normal, working state of this VM.
 
 ### 2. Run it
 
@@ -137,26 +140,30 @@ omarchy update
 Not under `sudo` — it escalates internally, and running the whole thing as root changes
 which user the user-level steps target.
 
-It logs to `/tmp/omarchy-update.log` via `script`, so the full transcript survives even
-if the terminal dies.
+It logs to `/tmp/omarchy-update.log` via `script`. **Copy that log somewhere before
+rebooting** — `/tmp` is cleared on boot and the transcript is gone.
 
 **Expected, harmless:**
 
 - `Continuing the update without a snapshot.` — Snapper is deliberately absent (we
   blanked `snapper.sh`; the disk is ext4). Exit 127 is handled and ignored by design.
-- Apple Silicon bundle steps running at all — that is the shim working.
+- No Apple Silicon bundle line. Detection is off; the step is skipped.
+- `omarchy-update-keyring` installing `archlinux-keyring` rather than
+  `archlinuxarm-keyring`. That is the x86 branch, and it is harmless — the package
+  exists for aarch64 and installs cleanly.
+- A dependency-resolution abort. See "What actually went wrong instead" above.
 
 **Abort and snapshot-restore if you see:**
 
-- `stable-mirror.omarchy.org` anywhere — detection failed and the x86 path is running
-- x86 package downloads, or `[multilib]` reappearing
+- `stable-mirror.omarchy.org` anywhere, or `[multilib]` reappearing
+- x86 package downloads
 - anything touching the bootloader or `m1n1`
 
 ### 3. Post-update checks
 
 ```bash
-cat /usr/share/omarchy/version                       # did it move?
-grep -nE '^\[|^Server' /etc/pacman.conf              # repos: core/extra/alarm/aur + [omarchy] on the asahi server
+pacman -Q omarchy-dev                                # did it move?
+grep -nE '^\[|^Server|^IgnorePkg' /etc/pacman.conf   # core/extra/alarm/aur, no [omarchy], hold intact
 sudo pacman -Sy                                      # must be clean
 grep -c efi_uga /boot/grub/grub.cfg                  # 0; if not, grub was updated
 head -2 /usr/share/omarchy/install/config/snapper.sh # still the exit-0 stub?
@@ -195,7 +202,7 @@ Then, in order — each failure points somewhere different:
 Repair rather than roll back when the damage is one of the known, understood items
 above. **Restore the snapshot** when the system will not boot, the desktop will not
 start, or `pacman` is in a state you cannot explain — an unexplained pacman config on a
-system with `SigLevel` involved is not worth debugging on a disposable VM.
+system with `SigLevel = Never` is not worth debugging on a disposable VM.
 
 ```bash
 # Mac
@@ -209,12 +216,27 @@ prlctl snapshot-switch "Omarchy 4" --id <snapshot-id>
 
 Record what each update actually did, so the guesswork above turns into fact.
 
-### Update 1 — (pending)
+### Update 1 — 2026-09-04 / 2026-09-05 — succeeded
 
-- Date:
-- Version before → after:
-- Shim in place: yes
-- Pacman config survived:
-- `install/` scripts restored:
-- GRUB updated:
-- Anything unexpected:
+- **Version before → after:** `omarchy-dev 4.0.0.r6673.g5939caf-1` → unchanged. The
+  bundle step is what moves this, and it was skipped. System packages moved; Omarchy
+  itself did not.
+- **Detection enabled:** no. `omarchy-hw-apple-silicon` → exit 2 throughout.
+  `enable-arm-detection.sh` was never run.
+- **Attempt 1:** aborted at transaction preparation on the `libaquamarine.so=13-64`
+  dependency failure. Nothing installed, nothing changed.
+- **Attempt 2:** after `IgnorePkg = aquamarine`, completed. 33 packages upgraded
+  (mesa `1:26.2.1`→`1:26.2.2`, chromium `…64`→`…75`, hyprtoolkit `0.5.4-4`→`0.5.4-5`,
+  util-linux, foot, wireplumber, nftables, …), 4 AUR packages via `yay`
+  (aether, cliamp, localsend-bin, xdg-terminal-exec), then 13 orphaned build deps pruned
+  (`go`, `bats`, `scdoc`, `gtk-layer-shell`, the python build chain).
+- **Pacman config survived:** yes. `mirrorlist` untouched since install; `pacman.conf`
+  modified only by our own `sed`. No `[multilib]`, no `[omarchy]`, no
+  `stable-mirror.omarchy.org` at any point.
+- **`install/` scripts restored:** no. All three stubs still `exit 0`.
+- **GRUB updated:** no. `grub.cfg` untouched since install; `efi_uga` count still 0.
+- **Migrations:** 94 of 94 applied, 0 pending.
+- **Anything unexpected:** yes, two things, both now written up above — the update path
+  never touches pacman config, and the ARM `--ignore` list is a no-op on this VM.
+- **Left behind:** `IgnorePkg = aquamarine`, to remove when ALARM rebuilds `hyprland`
+  and `hyprtoolkit` against `libaquamarine.so=14`.

@@ -2,7 +2,12 @@
 # Restore Arch Linux ARM pacman config after Omarchy overwrites it with x86 mirrors.
 #
 # Tested against: Omarchy 4.0.0-mac.*, Arch Linux ARM aarch64, Parallels on Apple Silicon.
-# Run: after every `omarchy update`, and any time pacman starts returning 404s.
+# Run: as a RECOVERY tool, when pacman is actually broken (404s, `could not find
+# database`, or makepkg reporting missing dependencies that do exist).
+#
+# NOT needed after `omarchy update`. Verified 2026-09-05: nothing in the update path
+# calls omarchy-refresh-pacman, and an update left mirrorlist and pacman.conf
+# untouched. It is Omarchy's install/ scripts and menu that rewrite pacman config.
 #
 # NOTE: this REPLACES /etc/pacman.conf wholesale. If you add your own IgnorePkg or
 # similar lines, add them to write_pacman_conf() below or they will be lost.
@@ -25,6 +30,12 @@ CheckSpace
 ParallelDownloads = 5
 SigLevel          = Never
 LocalFileSigLevel = Never
+
+# Temporary hold, added 2026-09-04. Arch Linux ARM bumped aquamarine to
+# libaquamarine.so=14 without rebuilding hyprland/hyprtoolkit, which still require
+# so=13, so aquamarine 0.15.0 is uninstallable and blocks the whole -Syu.
+# REMOVE once `pacman -Si hyprland | grep aquamarine` reports so=14.
+IgnorePkg         = aquamarine
 
 [core]
 Include = /etc/pacman.d/mirrorlist
