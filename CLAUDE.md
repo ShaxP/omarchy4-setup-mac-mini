@@ -53,4 +53,6 @@ Two things to know going in:
 
 - `IgnorePkg = aquamarine` is held in `/etc/pacman.conf` and in
   `scripts/fix-pacman-arm.sh`, working around an Arch Linux ARM soname lag. Remove from
-  both once `pacman -Si hyprland | grep aquamarine` reports `so=14`.
+  both once ALARM rebuilds `hyprland`/`hyprtoolkit` against `so=14`. Last checked
+  2026-09-05: not yet, and not imminent. Hold watch log and a check that cannot read a
+  stale sync DB are in `notes/omarchy-update-checklist.md`.

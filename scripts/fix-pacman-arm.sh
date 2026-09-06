@@ -34,7 +34,9 @@ LocalFileSigLevel = Never
 # Temporary hold, added 2026-09-04. Arch Linux ARM bumped aquamarine to
 # libaquamarine.so=14 without rebuilding hyprland/hyprtoolkit, which still require
 # so=13, so aquamarine 0.15.0 is uninstallable and blocks the whole -Syu.
-# REMOVE once `pacman -Si hyprland | grep aquamarine` reports so=14.
+# REMOVE once ALARM rebuilds hyprland/hyprtoolkit against so=14. Check with
+# `sudo pacman -Sy` first - `pacman -Si` alone can answer from a stale sync DB.
+# Hold watch log: notes/omarchy-update-checklist.md
 IgnorePkg         = aquamarine
 
 [core]

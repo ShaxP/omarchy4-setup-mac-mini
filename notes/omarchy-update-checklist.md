@@ -94,9 +94,24 @@ This is temporary and must be removed once ALARM catches up, or the compositor s
 silently rots. Check periodically:
 
 ```bash
+sudo pacman -Sy                           # NOT optional - see below
 pacman -Si hyprland | grep aquamarine     # when this says so=14, drop the hold
 sudo sed -i '/^IgnorePkg.*aquamarine/d' /etc/pacman.conf
 ```
+
+**`pacman -Si` reads the local sync DB, which can be days old.** On 2026-09-05 it was
+answering from a snapshot taken before the update and would have given the right answer
+by luck rather than by being current. Sync first, or read the live repo directly — which
+needs no sudo and cannot be stale:
+
+```bash
+curl -fsSL -o /tmp/extra.db http://mirror.archlinuxarm.org/aarch64/extra/extra.db
+mkdir -p /tmp/edb && tar -xzf /tmp/extra.db -C /tmp/edb
+grep -rl 'libaquamarine.so=13-64' /tmp/edb/*/depends | xargs -r -n1 dirname | xargs -r -n1 basename
+```
+
+Deps live in each package's `depends` file, not `desc`. An empty result means nothing in
+`[extra]` still wants `so=13` and the hold can go.
 
 `fix-pacman-arm.sh` carries the same hold, because it rewrites `pacman.conf` wholesale
 and would otherwise silently drop it. Remove it from both places at the same time.
@@ -240,3 +255,18 @@ Record what each update actually did, so the guesswork above turns into fact.
   never touches pacman config, and the ARM `--ignore` list is a no-op on this VM.
 - **Left behind:** `IgnorePkg = aquamarine`, to remove when ALARM rebuilds `hyprland`
   and `hyprtoolkit` against `libaquamarine.so=14`.
+
+---
+
+## Hold watch — `aquamarine`
+
+Checked against the live ALARM `[extra]` database, not the local sync DB.
+
+| Checked | `aquamarine` | `hyprland` | `hyprtoolkit` | Hold |
+|---|---|---|---|---|
+| 2026-09-05 | 0.15.0-2, provides `so=14` (built 09-04) | 0.56.1-3, needs `so=13` (built 08-01) | 0.5.4-5, needs `so=13` (built 09-04) | **stays** |
+
+2026-09-05 note: `hyprtoolkit` was rebuilt on 09-04, *after* aquamarine 0.15 landed, and
+still came out linked against `so=13` — so ALARM's builder still had aquamarine 0.14 in
+its chroot. The rebuild has not started, rather than being queued and imminent. No point
+re-checking daily.
